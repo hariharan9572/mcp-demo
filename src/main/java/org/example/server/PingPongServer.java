@@ -3,14 +3,26 @@ package org.example.server;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
+import org.eclipse.jetty.server.Server;
 
 public class PingPongServer {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+        int port = resolvePort(args);
+        String baseUrl = "http://localhost:" + port;
+
         McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
-        StdioServerTransportProvider transportProvider = new StdioServerTransportProvider(jsonMapper);
+        HttpServletSseServerTransportProvider transportProvider =
+                HttpServletSseServerTransportProvider.builder()
+                        .jsonMapper(jsonMapper)
+                        .baseUrl(baseUrl)
+                        .sseEndpoint("/sse")
+                        .messageEndpoint("/message")
+                        .build();
 
         McpSchema.Tool pingTool = McpSchema.Tool.builder()
                 .name("ping")
@@ -18,7 +30,12 @@ public class PingPongServer {
                 .inputSchema(jsonMapper, """
                         {
                           "type": "object",
-                          "properties": {}
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false
                         }
                         """)
                 .build();
@@ -26,18 +43,40 @@ public class PingPongServer {
         McpSyncServer server = McpServer.sync(transportProvider)
                 .serverInfo("ping-pong-server", "1.0.0")
                 .tool(pingTool, (exchange, params) -> {
-                    System.err.println("Received ping request");
-                    return new McpSchema.CallToolResult("Hello World", false);
+                    String serverTime = java.time.OffsetDateTime.now().toString();
+                    System.err.println("Received ping request at " + serverTime);
+                    return new McpSchema.CallToolResult("pong @ " + serverTime, false);
                 })
                 .build();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(server::closeGracefully));
-        System.err.println("MCP Ping-Pong Server started");
-        // Keep the process alive to continue serving stdio requests.
-        try {
-            new java.util.concurrent.CountDownLatch(1).await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        Server httpServer = new Server(port);
+        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
+        context.setContextPath("/");
+        context.addServlet(new ServletHolder(transportProvider), "/*");
+        httpServer.setHandler(context);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                httpServer.stop();
+            } catch (Exception e) {
+                System.err.println("Failed to stop HTTP server cleanly: " + e.getMessage());
+            }
+            server.closeGracefully();
+        }));
+
+        httpServer.start();
+        System.err.println("MCP Ping-Pong Server started on " + baseUrl);
+        httpServer.join();
+    }
+
+    private static int resolvePort(String[] args) {
+        if (args != null && args.length > 0 && !args[0].isBlank()) {
+            return Integer.parseInt(args[0]);
         }
+        String envPort = System.getenv("PORT");
+        if (envPort != null && !envPort.isBlank()) {
+            return Integer.parseInt(envPort);
+        }
+        return 8080;
     }
 }
