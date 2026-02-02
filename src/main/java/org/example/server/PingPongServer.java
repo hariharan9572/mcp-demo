@@ -27,7 +27,7 @@ public class PingPongServer {
                 .serverInfo("ping-pong-server", "1.0.0")
                 .tool(pingTool, (exchange, params) -> {
                     System.err.println("Received ping request");
-                    return new McpSchema.CallToolResult("pong", false);
+                    return new McpSchema.CallToolResult("Hello World", false);
                 })
                 .build();
 
