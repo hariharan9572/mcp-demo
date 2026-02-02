@@ -8,8 +8,12 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.server.Server;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PingPongServer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PingPongServer.class);
 
     public static void main(String[] args) throws Exception {
         int port = resolvePort(args);
@@ -44,7 +48,7 @@ public class PingPongServer {
                 .serverInfo("ping-pong-server", "1.0.0")
                 .tool(pingTool, (exchange, params) -> {
                     String serverTime = java.time.OffsetDateTime.now().toString();
-                    System.err.println("Received ping request at " + serverTime);
+                    LOGGER.info("Received ping request at {}", serverTime);
                     return new McpSchema.CallToolResult("pong @ " + serverTime, false);
                 })
                 .build();
@@ -59,13 +63,13 @@ public class PingPongServer {
             try {
                 httpServer.stop();
             } catch (Exception e) {
-                System.err.println("Failed to stop HTTP server cleanly: " + e.getMessage());
+                LOGGER.warn("Failed to stop HTTP server cleanly: {}", e.getMessage());
             }
             server.closeGracefully();
         }));
 
         httpServer.start();
-        System.err.println("MCP Ping-Pong Server started on " + baseUrl);
+        LOGGER.info("MCP Ping-Pong Server started on {}", baseUrl);
         httpServer.join();
     }
 

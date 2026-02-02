@@ -67,3 +67,4 @@ mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
 
 - If you see a warning about `sun.misc.Unsafe`, it comes from Maven/Guice and does not block the demo.
 - If you run `exec:java` without `compile`, Maven may execute stale classes. Use `compile exec:java` as shown above.
+- Logs are emitted via SLF4J (backed by `slf4j-simple`).

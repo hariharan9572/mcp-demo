@@ -5,10 +5,14 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public class PingClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PingClient.class);
 
     public static void main(String[] args) throws Exception {
         ClientConfig config = resolveConfig(args);
@@ -25,7 +29,7 @@ public class PingClient {
             McpSchema.CallToolResult response =
                     client.callTool(new McpSchema.CallToolRequest("ping", Map.of("message", config.message)));
 
-            System.out.println("✅ Server response: " + response);
+            LOGGER.info("Server response: {}", response);
         } finally {
             client.closeGracefully();
         }
