@@ -1,80 +1,89 @@
-# MCP Ping-Pong Demo
+# Lucene + MySQL MCP Server
 
-This project is a simple Model Context Protocol (MCP) demo that runs an HTTP/SSE server on a port and a client that calls server tools. The server exposes `ping`, `pong`, `ding`, and `dong` tools. `ping`/`pong` return the server time, and `ding`/`dong` return the server time reversed.
+This project indexes MySQL tables into Lucene and serves search/lookup APIs from Lucene only. It also exposes MCP tools (including the original ping/pong/ding/dong tools plus table-specific search/lookup tools) alongside the REST endpoints.
 
-## Prerequisites
+## Config
 
-- Java 25 (as configured in `pom.xml`)
-- Maven 3.9+
+Create or edit `config.yaml` in the repo root:
 
-## Build
+```yaml
+server:
+  host: 0.0.0.0
+  port: 8080
 
-The commands below use a local Maven repository in `/tmp/m2` to avoid permission issues with the default `~/.m2` directory.
+lucene:
+  index_path: "./data/index"
 
-```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 compile
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  database: droptruck_db
+  username: web_app_sa
+  password: web_app_sa
 ```
 
-## Run the server
+## Ingest (Build the Index)
+
+Run once to build the Lucene index:
 
 ```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
-  compile exec:java \
-  -Dexec.mainClass=org.example.server.McpServerApp \
-  -Dexec.args=8080
+mvn -f server/pom.xml clean compile exec:java \
+  -Dexec.mainClass=org.vectora.server.McpServerApp \
+  -Dexec.args="--config ./config.yaml --ingest"
 ```
 
-You can pass a different port number as the argument. If no argument is provided, the server uses port `8080`. You can also set the `PORT` environment variable.
+This will:
 
-## Run the client
+- read MySQL tables
+- write a Lucene index into `data/index/`
+
+## Run Server (No Ingest)
+
+After the index exists:
 
 ```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
-  compile exec:java \
-  -Dexec.mainClass=org.example.client.McpClientApp \
-  -Dexec.args=ping
+mvn -f server/pom.xml clean compile exec:java \
+  -Dexec.mainClass=org.vectora.server.McpServerApp \
+  -Dexec.args="--config ./config.yaml"
 ```
 
-The client calls the chosen tool and prints the server response.
+If the index is missing, the server will auto-ingest on startup.
 
-### Client arguments
+## HTTP Endpoints
 
-If you provide a single argument, it can be either:
-
-- a tool name (e.g., `ping`, `pong`, `ding`, `dong`)
-- `list` to fetch the available tools from the server
-- a port number (e.g., `8080`)
-- a full base URL (e.g., `http://localhost:8080`)
-
-To pass both a message and base URL:
+List tools:
 
 ```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
-  compile exec:java \
-  -Dexec.mainClass=org.example.client.McpClientApp \
-  -Dexec.args="ping http://localhost:8080"
+curl http://localhost:8080/tools
 ```
 
-You can also pass a message and a port number:
+Health:
 
 ```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
-  compile exec:java \
-  -Dexec.mainClass=org.example.client.McpClientApp \
-  -Dexec.args="ping 8080"
+curl http://localhost:8080/health
 ```
 
-To list available tools:
+Search:
 
 ```bash
-mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2 \
-  compile exec:java \
-  -Dexec.mainClass=org.example.client.McpClientApp \
-  -Dexec.args=list
+curl "http://localhost:8080/search?query=your+search+terms"
+```
+
+Optional search filters:
+
+- `table` (e.g. `&table=employees`)
+- `created_at_from` / `created_at_to` (ISO-8601 or epoch millis)
+- `limit` (default 50, max 500)
+
+Row Lookup (any table):
+
+```bash
+curl http://localhost:8080/{table}/{id}
 ```
 
 ## Notes
 
-- If you see a warning about `sun.misc.Unsafe`, it comes from Maven/Guice and does not block the demo.
-- If you run `exec:java` without `compile`, Maven may execute stale classes. Use `compile exec:java` as shown above.
-- Logs are emitted via SLF4J (backed by `slf4j-simple`).
+- All responses are served from Lucene only.
+- Re-ingest whenever DB/app code changes.
+- If port 8080 is in use, change `server.port` in `config.yaml`.
+- MCP transport is exposed under `/mcp` (e.g. `http://localhost:8080/mcp`).

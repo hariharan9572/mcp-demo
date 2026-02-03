@@ -1,0 +1,182 @@
+version: "1.0"
+
+project:
+  name: "pg-and-fs-to-lucene-rest"
+  description: "Declarative spec: ingest Postgres tables + filesystem docs, index into Lucene, expose via REST."
+
+lucene:
+  index_root: "./data/lucene"
+  analyzer: "standard"
+  refresh_policy:
+    mode: "scheduled"
+    interval: "5m"
+  commit_policy:
+    mode: "batch"
+    batch_size: 5000
+
+sources:
+  postgres:
+    - id: "hr_pg"
+      type: "postgres"
+      jdbc:
+        url: "jdbc:postgresql://localhost:5432/employees_db"
+        user: "myuser"
+        password: "mypassword"
+        ssl: false
+        connection_pool:
+          max_size: 10
+          min_idle: 2
+          timeout_ms: 30000
+
+      introspection:
+        enabled: true
+        schema: "public"
+        fetch_primary_keys: true
+        fetch_foreign_keys: false
+
+      entities:
+        - name: "employees"
+          table: "public.employees"
+          primary_key: "id"
+
+          expose_rest: true
+          rest:
+            path: "/employees"
+            methods: ["GET"]
+            default_limit: 50
+            max_limit: 500
+            allow_fields:
+              - id
+              - name
+              - email
+              - department_id
+              - created_at
+              - updated_at
+
+          indexing:
+            enabled: true
+            index_name: "employees_idx"
+            mode: "incremental"
+            document_id: "${id}"
+
+            columns:
+              - name: "id"
+                store: true
+                index: true
+              - name: "name"
+                store: true
+                index: true
+              - name: "email"
+                store: true
+                index: true
+              - name: "department_id"
+                store: true
+                index: true
+              - name: "created_at"
+                store: true
+                index: false
+              - name: "updated_at"
+                store: true
+                index: false
+
+            filters:
+              - kind: "time_window"
+                column: "updated_at"
+                newer_than_days: 2
+                timezone: "UTC"
+                on_missing_column: "fail"
+
+            query_hints:
+              order_by: "updated_at ASC"
+              fetch_size: 2000
+
+  filesystem:
+    - id: "reports_local"
+      type: "filesystem"
+      mode: "local"
+      root_path: "/data/reports"
+
+      scanning:
+        recursive: true
+        include_globs:
+          - "**/*.txt"
+          - "**/*.md"
+          - "**/*.pdf"
+          - "**/*.log"
+        exclude_globs:
+          - "**/.git/**"
+          - "**/tmp/**"
+        follow_symlinks: false
+
+      filters:
+        - kind: "time_window"
+          attribute: "modified_at"
+          newer_than_days: 2
+          timezone: "UTC"
+
+      expose_rest: true
+      rest:
+        path: "/files/reports"
+        methods: ["GET"]
+        default_limit: 50
+        max_limit: 500
+
+      indexing:
+        enabled: true
+        index_name: "reports_idx"
+        mode: "incremental"
+        document_id: "${path}"
+
+        fields:
+          - name: "path"
+            store: true
+            index: true
+          - name: "filename"
+            store: true
+            index: true
+          - name: "modified_at"
+            store: true
+            index: false
+          - name: "content"
+            store: false
+            index: true
+
+        content_extraction:
+          enabled: true
+          strategy: "auto"
+          max_bytes: 5000000
+
+api:
+  server:
+    host: "0.0.0.0"
+    port: 8080
+
+  base_path: "/api"
+
+  auth:
+    mode: "none"
+
+  endpoints:
+    - name: "search_employees"
+      path: "/search/employees"
+      method: "GET"
+      index: "employees_idx"
+      query_param: "q"
+
+    - name: "search_reports"
+      path: "/search/reports"
+      method: "GET"
+      index: "reports_idx"
+      query_param: "q"
+
+observability:
+  logging:
+    level: "INFO"
+
+  metrics:
+    enabled: true
+    path: "/metrics"
+
+  health:
+    enabled: true
+    path: "/health"
