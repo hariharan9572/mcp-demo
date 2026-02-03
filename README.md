@@ -75,6 +75,28 @@ Optional search filters:
 - `created_at_from` / `created_at_to` (ISO-8601 or epoch millis)
 - `limit` (default 50, max 500)
 
+Examples:
+
+```bash
+# basic keyword search
+curl "http://localhost:8080/search?query=truck"
+
+# table-specific search
+curl "http://localhost:8080/search?table=indents&query=truck"
+
+# last 3 months of `indents` (adjust the date as needed)
+curl "http://localhost:8080/search?table=indents&query=&created_at_from=2025-11-03T00:00:00Z"
+
+# explicit date range
+curl "http://localhost:8080/search?table=indents&query=&created_at_from=2026-01-01T00:00:00Z&created_at_to=2026-02-01T00:00:00Z"
+
+# epoch millis date range
+curl "http://localhost:8080/search?table=indents&query=&created_at_from=1704067200000&created_at_to=1706745600000"
+
+# limit results
+curl "http://localhost:8080/search?table=indents&query=truck&limit=25"
+```
+
 Row Lookup (any table):
 
 ```bash
