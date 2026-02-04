@@ -15,7 +15,7 @@ lucene:
     batch_size: 5000
 
 sources:
-  postgres:
+  rdbms:
     - id: "hr_pg"
       type: "postgres"
       jdbc:
@@ -43,8 +43,7 @@ sources:
           rest:
             path: "/employees"
             methods: ["GET"]
-            default_limit: 50
-            max_limit: 500
+            jdbc_batch: 5000
             allow_fields:
               - id
               - name
